@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Image Processor [cite: 3]</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        h1, h2 { color: #333; }
+        #upload-form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        #status-dashboard { margin-top: 20px; }
+        #job-status, #worker-status { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-top: 10px; }
+        #progress-bar { width: 0%; height: 20px; background-color: #4CAF50; border-radius: 5px; }
+        #progress-container { width: 100%; background-color: #ddd; border-radius: 5px; }
+        #result-image { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+    <h1>🖼️ Distributed Image Processing Pipeline</h1>
+    <p>Using Kafka for asynchronous processing.</p>
+
+    <div id="upload-form">
+        <h2>1. Upload Image</h2>
+        <form id="imageUploadForm">
+            <input type="file" name="file" id="fileInput" accept="image/*" required>
+            <button type="submit">Process Image</button>
+        </form>
+    </div>
+
+    <div id="status-dashboard" style="display: none;">
+        
+        <div id="job-status">
+            <h2>2. Job Progress</h2>
+            <p><strong>Job ID:</strong> <span id="job-id"></span></p>
+            <p><strong>Status:</strong> <span id="status-text"></span></p>
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+            <p><span id="progress-count"></span></p>
+            <div id="result-display"></div>
+        </div>
+
+        <div id="worker-status">
+            <h2>Worker Activity</h2>
+            <p><strong>Active Workers:</strong> <span id="worker-count">0</span></p> </div>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('imageUploadForm');
+        const fileInput = document.getElementById('fileInput');
+        
+        // Status elements
+        const dashboard = document.getElementById('status-dashboard');
+        const jobIdSpan = document.getElementById('job-id');
+        const statusText = document.getElementById('status-text');
+        const progressBar = document.getElementById('progress-bar');
+        const progressCount = document.getElementById('progress-count');
+        const resultDisplay = document.getElementById('result-display');
+        const workerCountSpan = document.getElementById('worker-count');
+
+        let currentJobId = null;
+        let statusInterval = null;
+
+        // Handle form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Clear previous results
+            resultDisplay.innerHTML = '';
+            dashboard.style.display = 'block';
+            statusText.innerText = 'Uploading...';
+            progressBar.style.width = '0%';
+            progressCount.innerText = '';
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentJobId = data.job_id;
+                    jobIdSpan.innerText = currentJobId;
+                    statusText.innerText = 'Queued';
+                    // Start polling for status
+                    if (statusInterval) clearInterval(statusInterval);
+                    statusInterval = setInterval(checkStatus, 2000); // Poll every 2 seconds
+                } else {
+                    statusText.innerText = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                statusText.innerText = `Upload failed: ${error}`;
+            }
+        });
+
+        // Poll for job and worker status
+        async function checkStatus() {
+            if (!currentJobId) {
+                // Just check worker status if no job is active
+                try {
+                    const res = await fetch('/status');
+                    const data = await res.json();
+                    workerCountSpan.innerText = data.active_workers;
+                } catch (e) {
+                    workerCountSpan.innerText = 'N/A (Error)';
+                }
+                return;
+            }
+
+            try {
+                const response = await fetch(`/status?job_id=${currentJobId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    statusText.innerText = data.status;
+                    workerCountSpan.innerText = data.active_workers;
+                    progressBar.style.width = `${data.progress_percent}%`;
+                    progressCount.innerText = `${data.processed_count} / ${data.total_tiles} tiles processed`;
+
+                    if (data.status === 'Complete') {
+                        clearInterval(statusInterval);
+                        statusText.innerText = 'Complete!';
+                        resultDisplay.innerHTML = `<h3>Result:</h3><img id="result-image" src="${data.result_image_url}" alt="Processed Image">`;
+                    } else if (data.status.includes('Failed')) {
+                        clearInterval(statusInterval);
+                        statusText.innerText = `Failed: ${data.error}`;
+                    }
+                } else {
+                    statusText.innerText = `Error: ${data.error}`;
+                    clearInterval(statusInterval);
+                }
+            } catch (error) {
+                statusText.innerText = 'Error checking status...';
+                clearInterval(statusInterval);
+            }
+        }
+        
+        // Initial worker check
+        checkStatus();
+    </script>
+</body>
+</html>
