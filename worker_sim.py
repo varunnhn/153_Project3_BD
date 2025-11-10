@@ -19,7 +19,13 @@ WORKER_ID = f"worker-{uuid.uuid4().hex[:8]}"
 
 def process_tile_bytes(tile_bytes, processing="grayscale"):
     img = Image.open(BytesIO(tile_bytes)).convert("RGB")
-    if processing == "grayscale":
+
+    if processing == "autocontrast":
+        # ImageOps.autocontrast() stretches the contrast of the image.
+        img = ImageOps.autocontrast(img)
+        print(f"[worker {WORKER_ID}] Applied Autocontrast.")
+        
+    elif processing == "grayscale":
         img = ImageOps.grayscale(img).convert("RGB")
     # add a small border or annotation if you want to see difference - optional
     # for now just return processed bytes
@@ -52,7 +58,7 @@ def tasks_loop():
             job_id = payload.get("job_id")
             tile_id = payload.get("tile_id")
             tile_b64 = payload.get("tile_b64")
-            processing = payload.get("processing", "grayscale")
+            processing = payload.get("processing", "autocontrast")
             tile_bytes = base64.b64decode(tile_b64)
             processed_bytes = process_tile_bytes(tile_bytes, processing=processing)
             processed_b64 = base64.b64encode(processed_bytes).decode('utf-8')
