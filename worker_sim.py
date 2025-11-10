@@ -13,7 +13,7 @@ import uuid
 TASKS_TOPIC = "tasks"
 RESULTS_TOPIC = "results"
 HEARTBEAT_TOPIC = "heartbeats"
-BOOTSTRAP = "localhost:9092"
+BOOTSTRAP = "192.168.192.246:9092"
 
 WORKER_ID = f"worker-{uuid.uuid4().hex[:8]}"
 
